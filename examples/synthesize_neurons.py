@@ -38,7 +38,7 @@ def run(output_dir, data_dir):
         # Initialize a neuron
         N = neurots.NeuronGrower(
             input_distributions=data_dir / "bio_distr.json",
-            input_parameters=data_dir / "bio_params.json",
+            input_parameters=data_dir / "bio_params.json"
         )
 
         # Grow the neuron
