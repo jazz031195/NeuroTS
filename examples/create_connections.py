@@ -74,6 +74,8 @@ def add_sphere_to_projections(s : Sphere, projections_x : list, projections_y : 
     # sort based on position
     projections_z = sorted(projections_z, key=lambda x: x.position, reverse=True)
 
+    return projections_x, projections_y, projections_z
+
 
 def create_projections(paths):
     """
@@ -108,7 +110,7 @@ def create_projections(paths):
             radius = r
             neurite_type = t
             sphere = Sphere (neurite_type, position, neurite_id, sphere_id, radius)
-            add_sphere_to_projections(sphere, projections_x, projections_y, projections_z)
+            projections_x, projections_y, projections_z = add_sphere_to_projections(sphere, projections_x, projections_y, projections_z)
             spheres.append(sphere)
             sphere_id += 1
         neurites.append(spheres)
@@ -150,7 +152,9 @@ def create_connectome(projections_x :list, projections_y: list, projections_z: l
     neurites : list of a list of spheres objects, so list of neurites
     """
     connectome = np.zeros((len(neurites), len(neurites)))
-    for neurite in neurites:
+    
+    for e, neurite in enumerate(neurites):
+        print(f"Creating connectome : Neurite {e}")
         for sphere in neurite :
             # if apical
             if sphere.neurite_type == 4:
