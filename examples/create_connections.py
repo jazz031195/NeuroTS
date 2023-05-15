@@ -3,28 +3,41 @@ import pandas as pd
 import numpy as np
 import os
 
+
 class Sphere:
 
     def __init__(self, neurite_type : int, position : dict, neurite_id: int, sphere_id :int, radius : float):
-        self.neurite_type = neurite_type # 3: basal, 4: apical,
+        self.neurite_type = neurite_type # 3: basal, 4: apical (axons)
         self.position = position
         self.neurite_id = neurite_id
         self.sphere_id = sphere_id 
         self.radius = radius
-        self.collision_spheres = []
     
-    def set_collision_spheres(self, collision_spheres):
-        self.collision_spheres = collision_spheres
+    def collide(self, other, distance_to_be_inside):
+        """
+        Check for collision
+        """
+        # calculate the difference between the two arrays
+        pos1 = np.array([self.position["x"],self.position["y"],self.position["z"]])
+        pos2 = np.array([other.position["x"],other.position["y"],other.position["z"]])
+        diff = pos1 - pos2
+        # calculate the Euclidean distance using the linalg.norm function
+        distance = np.linalg.norm(diff)
+        if distance > self.radius + other.radius + distance_to_be_inside:
+            return False
+        else:
+            return True
 
 
 class Sphere_Projection :
 
     def __init__(self, position : float, neurite_id: int, sphere_id :int, axis : str, neurite_type : str):
         self.position = position
-        self.neurite_id = neurite_id
+        self.neurite_id = neurite_id # 3: basal, 4: apical
         self.sphere_id = sphere_id 
         self.axis = axis
         self.neurite_type = neurite_type
+
 
     def __eq__(self, other):
         """
@@ -47,6 +60,13 @@ class Sphere_Projection :
             return False
         else:
             return True
+    
+    def isin(self, other : list):
+        for p in other:
+            if self.neurite_id == p.neurite_id and self.sphere_id == p.sphere_id:
+                return True
+        return False
+
 
     
 def add_sphere_to_projections(s : Sphere, projections_x : list, projections_y : list, projections_z : list):
@@ -79,7 +99,7 @@ def add_sphere_to_projections(s : Sphere, projections_x : list, projections_y : 
 
 def create_projections(paths):
     """
-    Read spheres from swc files and save them in the environment as projections
+    Read spheres from swc files and save them in the environment as projections. Only the basal dendrites are saved in the projections.
     paths : list of str, list of the paths to the swc files
     neurites : list of a list of spheres objects, so list of neurites
     projections : list of sphere projection objects, in x , y and z
@@ -88,7 +108,7 @@ def create_projections(paths):
     projections_y = []
     projections_z = []
     neurite_id = 0
-    points = np.random.rand(len(paths),3)*10
+    points = np.random.rand(len(paths),3)*100
     neurites = []
     for e,path in enumerate(paths):
         print(f"Creating projection for Neurite {e}")
@@ -104,13 +124,15 @@ def create_projections(paths):
         spheres = []
         for x,y,z,t,r in zip(xs,ys,zs,types,radii):
             position = {}
-            position["x"] = x 
-            position["y"] = y
-            position["z"] = z
-            radius = r
-            neurite_type = t
+            position["x"] = float(x) 
+            position["y"] = float(y)
+            position["z"] = float(z)
+            radius = float(r)
+            neurite_type = int(t)
             sphere = Sphere (neurite_type, position, neurite_id, sphere_id, radius)
-            projections_x, projections_y, projections_z = add_sphere_to_projections(sphere, projections_x, projections_y, projections_z)
+            #print(f"Added sphere neurote type: {sphere.neurite_type}")
+            if neurite_type == 3:
+                projections_x, projections_y, projections_z = add_sphere_to_projections(sphere, projections_x, projections_y, projections_z)
             spheres.append(sphere)
             sphere_id += 1
         neurites.append(spheres)
@@ -118,31 +140,30 @@ def create_projections(paths):
 
     return neurites, projections_x, projections_y, projections_z
 
-def projections_inbetween(projections: list, s : Sphere, axis = str):
+def projections_inbetween(projections: list, s : Sphere, axis : str, distance_to_be_inside : float):
     """
     Find projections of spheres that might collide with sphere s 
     projections : list of sphere projections objects, can be inx,y or z axis
     s : sphere to check collision with
     axis : str, x, y or z
+    distance_to_be_inside : distance from which tow spheres are considered to be collisiding
     """
 
-    proj_1 = Sphere_Projection (s.position[axis] + s.radius, s.neurite_id, s.sphere_id, axis, s.neurite_type)
-    proj_2 = Sphere_Projection (s.position[axis] - s.radius, s.neurite_id, s.sphere_id, axis, s.neurite_type)
+    proj_1 = Sphere_Projection (s.position[axis] + s.radius + distance_to_be_inside, s.neurite_id, s.sphere_id, axis, s.neurite_type)
+    proj_2 = Sphere_Projection (s.position[axis] - s.radius - distance_to_be_inside, s.neurite_id, s.sphere_id, axis, s.neurite_type)
 
-    proj_1_index = next((p for p in projections if proj_1 == p), None)
+    projections_in_between = [p for p in projections if proj_1.position > p.position and proj_2.position < p.position and s.neurite_type != p.neurite_id]
     
-    proj_2_index = next((p for p in projections if proj_2 == p), None) 
+    #first_ind = next((i for i,p in enumerate(projections) if proj_2.position < p.position and proj_2.neurite_id != p.neurite_id), None)
+    #last_ind = next((i for i,p in enumerate(projections) if proj_1.position > p.position and proj_1.neurite_id != p.neurite_id), None) 
+    #if first_ind == None:
+    #projections_in_between = []
+    #for i in range(first_ind, last_ind):
+    #    projections_in_between.append(projections[i])
 
-    projections_in_between = []
 
-    if (proj_1_index != None and proj_2_index != None):
-        for i in range(proj_1_index+1, proj_2_index):
-            projections_in_between.append(projections[i])
-    
-        return projections_in_between
-    else :
-        print("Sphere is not in projections environment")
-        raise ValueError
+    return projections_in_between
+
     
 
 def create_connectome(projections_x :list, projections_y: list, projections_z: list, neurites : list):
@@ -152,28 +173,32 @@ def create_connectome(projections_x :list, projections_y: list, projections_z: l
     neurites : list of a list of spheres objects, so list of neurites
     """
     connectome = np.zeros((len(neurites), len(neurites)))
+    distance_to_be_inside = 0
     
     for e, neurite in enumerate(neurites):
         print(f"Creating connectome : Neurite {e}")
+        #print(f"Number of spheres in neurite : {len(neurite)}")
         for sphere in neurite :
             # if apical
+            print(f"Progress : {sphere.sphere_id}/{len(neurite)}")
+
             if sphere.neurite_type == 4:
-                proj_inbetween_x = projections_inbetween(projections_x, sphere, "x")
-                proj_inbetween_y = projections_inbetween(projections_y, sphere, "y")
-                proj_inbetween_z = projections_inbetween(projections_z, sphere, "z")
+                proj_inbetween_x = projections_inbetween(projections_x, sphere, "x", distance_to_be_inside)
+                proj_inbetween_y = projections_inbetween(projections_y, sphere, "y", distance_to_be_inside)
+                proj_inbetween_z = projections_inbetween(projections_z, sphere, "z", distance_to_be_inside)
 
                 colliding_spheres = []
-            
+
                 if (len(proj_inbetween_x)>0 and len(proj_inbetween_y)>0 and len(proj_inbetween_z)>0):
                     for p in proj_inbetween_x:
                         # if basal
-                        if p.neurite_type == 3 and p in proj_inbetween_y and p in proj_inbetween_z :
+                        if p.neurite_type == 3 and p.isin(proj_inbetween_y) and p.isin(proj_inbetween_z) :
                             colliding_sphere = neurites[p.neurite_id][p.sphere_id]
-                            if sphere.collide(colliding_sphere):
+                            if sphere.collide(colliding_sphere, distance_to_be_inside):
                                 colliding_spheres.append(colliding_sphere)
                                 connectome[sphere.neurite_id][p.neurite_id] = 1
                                 connectome[p.neurite_id][sphere.neurite_id] = 1
-                    
+    np.fill_diagonal(connectome, 1)    
     return connectome
 
 def main():
