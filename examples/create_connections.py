@@ -152,14 +152,7 @@ def projections_inbetween(projections: list, s : Sphere, axis : str, distance_to
     proj_1 = Sphere_Projection (s.position[axis] + s.radius + distance_to_be_inside, s.neurite_id, s.sphere_id, axis, s.neurite_type)
     proj_2 = Sphere_Projection (s.position[axis] - s.radius - distance_to_be_inside, s.neurite_id, s.sphere_id, axis, s.neurite_type)
 
-    projections_in_between = [p for p in projections if proj_1.position > p.position and proj_2.position < p.position and s.neurite_type != p.neurite_id]
-    
-    #first_ind = next((i for i,p in enumerate(projections) if proj_2.position < p.position and proj_2.neurite_id != p.neurite_id), None)
-    #last_ind = next((i for i,p in enumerate(projections) if proj_1.position > p.position and proj_1.neurite_id != p.neurite_id), None) 
-    #if first_ind == None:
-    #projections_in_between = []
-    #for i in range(first_ind, last_ind):
-    #    projections_in_between.append(projections[i])
+    projections_in_between = [p for p in projections if proj_1.position > p.position and proj_2.position < p.position]
 
 
     return projections_in_between
@@ -173,7 +166,7 @@ def create_connectome(projections_x :list, projections_y: list, projections_z: l
     neurites : list of a list of spheres objects, so list of neurites
     """
     connectome = np.zeros((len(neurites), len(neurites)))
-    distance_to_be_inside = 0
+    distance_to_be_inside = 1e-5
     
     for e, neurite in enumerate(neurites):
         print(f"Creating connectome : Neurite {e}")
@@ -197,8 +190,7 @@ def create_connectome(projections_x :list, projections_y: list, projections_z: l
                             if sphere.collide(colliding_sphere, distance_to_be_inside):
                                 colliding_spheres.append(colliding_sphere)
                                 connectome[sphere.neurite_id][p.neurite_id] = 1
-                                connectome[p.neurite_id][sphere.neurite_id] = 1
-    np.fill_diagonal(connectome, 1)    
+  
     return connectome
 
 def main():
