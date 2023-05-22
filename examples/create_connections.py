@@ -7,7 +7,7 @@ import os
 class Sphere:
 
     def __init__(self, neurite_type : int, position : dict, neurite_id: int, sphere_id :int, radius : float):
-        self.neurite_type = neurite_type # 3: basal, 4: apical (axons)
+        self.neurite_type = neurite_type # 3: basal, 4: apical , 2 : axons
         self.position = position
         self.neurite_id = neurite_id
         self.sphere_id = sphere_id 
@@ -97,7 +97,7 @@ def add_sphere_to_projections(s : Sphere, projections_x : list, projections_y : 
     return projections_x, projections_y, projections_z
 
 
-def create_projections(paths):
+def create_projections(repetitions, paths, max_area,points = None):
     """
     Read spheres from swc files and save them in the environment as projections. Only the basal dendrites are saved in the projections.
     paths : list of str, list of the paths to the swc files
@@ -108,37 +108,42 @@ def create_projections(paths):
     projections_y = []
     projections_z = []
     neurite_id = 0
-    points = np.random.rand(len(paths),3)*100
+    if points is None:
+        points = np.random.rand(int(len(paths)*repetitions),3)*max_area
     neurites = []
-    for e,path in enumerate(paths):
-        print(f"Creating projection for Neurite {e}")
-        # reads from swc file
-        neurons_data = pd.read_csv(path, sep="\s+", header=1)
-        # coordinates incremented with a random point
-        xs = [i+ points[e,0] for i in list(neurons_data["X"])]
-        ys = [i+ points[e,1] for i in list(neurons_data["Y"])]
-        zs = [i+ points[e,2] for i in  list(neurons_data["Z"])]
-        types = list(neurons_data["type"])
-        radii = list(neurons_data["radius"])
-        sphere_id = 0
-        spheres = []
-        for x,y,z,t,r in zip(xs,ys,zs,types,radii):
-            position = {}
-            position["x"] = float(x) 
-            position["y"] = float(y)
-            position["z"] = float(z)
-            radius = float(r)
-            neurite_type = int(t)
-            sphere = Sphere (neurite_type, position, neurite_id, sphere_id, radius)
-            #print(f"Added sphere neurote type: {sphere.neurite_type}")
-            if neurite_type == 3:
-                projections_x, projections_y, projections_z = add_sphere_to_projections(sphere, projections_x, projections_y, projections_z)
-            spheres.append(sphere)
-            sphere_id += 1
-        neurites.append(spheres)
-        neurite_id += 1
+    for path in paths:
+        for n in range(repetitions):
+            print(f"Creating projection for Neurite {neurite_id}")
+            print(f"Path : {path}")
+            # reads from swc file
+            neurons_data = pd.read_csv(path, sep="\s+", skiprows=2, header=0)
+            neurons_data.columns=["index", "type","X", "Y","Z","radius","parent"]
+            # coordinates incremented with a random point
+            xs = [i+ points[neurite_id,0] for i in list(neurons_data["X"])]
+            ys = [i+ points[neurite_id,1] for i in list(neurons_data["Y"])]
+            zs = [i+ points[neurite_id,2] for i in  list(neurons_data["Z"])]
+            types = list(neurons_data["type"])
+            radii = list(neurons_data["radius"])
+            sphere_id = 0
+            spheres = []
+            for x,y,z,t,r in zip(xs,ys,zs,types,radii):
+                position = {}
+                position["x"] = float(x) 
+                position["y"] = float(y)
+                position["z"] = float(z)
+                radius = float(r)
+                neurite_type = int(t)
+                sphere = Sphere (neurite_type, position, neurite_id, sphere_id, radius)
+                #print(f"Added sphere neurote type: {sphere.neurite_type}")
+                if neurite_type == 3 or neurite_type == 4:
+                    projections_x, projections_y, projections_z = add_sphere_to_projections(sphere, projections_x, projections_y, projections_z)
+                spheres.append(sphere)
+                sphere_id += 1
 
-    return neurites, projections_x, projections_y, projections_z
+            neurites.append(spheres)
+            neurite_id += 1
+
+    return neurites, projections_x, projections_y, projections_z, points
 
 def projections_inbetween(projections: list, s : Sphere, axis : str, distance_to_be_inside : float):
     """
@@ -167,6 +172,7 @@ def create_connectome(projections_x :list, projections_y: list, projections_z: l
     """
     connectome = np.zeros((len(neurites), len(neurites)))
     distance_to_be_inside = 1e-5
+    colliding_spheres = []
     
     for e, neurite in enumerate(neurites):
         print(f"Creating connectome : Neurite {e}")
@@ -175,30 +181,47 @@ def create_connectome(projections_x :list, projections_y: list, projections_z: l
             # if apical
             print(f"Progress : {sphere.sphere_id}/{len(neurite)}")
 
-            if sphere.neurite_type == 4:
+            if sphere.neurite_type == 2:
                 proj_inbetween_x = projections_inbetween(projections_x, sphere, "x", distance_to_be_inside)
                 proj_inbetween_y = projections_inbetween(projections_y, sphere, "y", distance_to_be_inside)
                 proj_inbetween_z = projections_inbetween(projections_z, sphere, "z", distance_to_be_inside)
 
-                colliding_spheres = []
-
                 if (len(proj_inbetween_x)>0 and len(proj_inbetween_y)>0 and len(proj_inbetween_z)>0):
                     for p in proj_inbetween_x:
                         # if basal
-                        if p.neurite_type == 3 and p.isin(proj_inbetween_y) and p.isin(proj_inbetween_z) :
+                        if (p.neurite_type == 3 or p.neurite_type == 4) and p.isin(proj_inbetween_y) and p.isin(proj_inbetween_z) :
                             colliding_sphere = neurites[p.neurite_id][p.sphere_id]
                             if sphere.collide(colliding_sphere, distance_to_be_inside):
                                 colliding_spheres.append(colliding_sphere)
                                 connectome[sphere.neurite_id][p.neurite_id] = 1
   
-    return connectome
+    return connectome, colliding_spheres
 
-def main():
-    files = os.listdir("results_neurons")
-    paths = [f"results_neurons/{f}" for f in files]
+def main_shrunk(repetitions, max_area, type):
+    files = os.listdir(f"synthesized_neurons/shrunk_75_synthetic_L4_{type}/")
+    paths = [f"synthesized_neurons/shrunk_75_synthetic_L4_{type}/{f}" for f in files if ".swc" in f]
     print("Creating projections")
-    neurites, projections_x, projections_y, projections_z = create_projections(paths)
-    connectome = create_connectome(projections_x, projections_y, projections_z, neurites)
-    print(connectome)
+    points = np.load(f"points_L4_{type}_rep_{repetitions}.npy")
+    neurites, projections_x, projections_y, projections_z, points = create_projections(repetitions,paths,points=points, max_area=max_area)
+    connectome, colliding_spheres = create_connectome(projections_x, projections_y, projections_z, neurites)
+    np.save(f"connectome_shrunk_75_L4_{type}_rep_{repetitions}", connectome)
+    np.save(f"colliding_spheres_shrunk_75_L4_{type}_rep_{repetitions}", colliding_spheres)
+    np.save(f"points_shrunk_75_L4_{type}_rep_{repetitions}", points)
+    print("Finished !")
 
-main()
+def main(repetitions, max_area, type):
+    files = os.listdir(f"synthesized_neurons/synthetic_L4_{type}/")
+    paths = [f"synthesized_neurons/synthetic_L4_{type}/{f}" for f in files if ".swc" in f]
+    print("Creating projections")
+    neurites, projections_x, projections_y, projections_z, points = create_projections(repetitions,paths, max_area=max_area)
+    connectome, colliding_spheres = create_connectome(projections_x, projections_y, projections_z, neurites)
+    np.save(f"connectome_L4_{type}_rep_{repetitions}", connectome)
+    np.save(f"colliding_spheres_L4_{type}_rep_{repetitions}", colliding_spheres)
+    np.save(f"points_L4_{type}_rep_{repetitions}", points)
+    print("Finished !")
+
+repetitions = 1
+max_area = 100
+type = "UPC"
+main(repetitions, max_area, type)
+main_shrunk(repetitions, max_area, type)
