@@ -96,6 +96,39 @@ def add_sphere_to_projections(s : Sphere, projections_x : list, projections_y : 
 
     return projections_x, projections_y, projections_z
 
+def interpolate_coordinates(xs,ys,zs,types, step_size):
+    # Initialize the output list
+    interpolated_coords = []
+    interpolated_types = []
+
+    # Iterate over the input coordinates
+    for i in range(len(xs) - 1):
+        # Get the current and next coordinate
+        curr_coord = np.array([xs[i],ys[i], zs[i]])
+        next_coord = np.array([xs[i+1],ys[i+1], zs[i+1]])
+
+        # Calculate the distance between the current and next coordinate
+        distance = np.linalg.norm(next_coord - curr_coord)
+
+        # Calculate the number of steps needed to reach the desired distance
+        num_steps = int(np.ceil(distance / step_size))
+        if num_steps == 0:
+            num_steps = 1
+
+        # Calculate the step size for each dimension
+        step = (next_coord - curr_coord) / num_steps
+
+        # Perform interpolation between the current and next coordinate
+        for j in range(num_steps):
+            interpolated_coord = curr_coord + j * step
+            interpolated_coords.append(interpolated_coord)
+            interpolated_types.append(types[i])
+
+    # Add the last coordinate
+    interpolated_coords.append(np.array([xs[i-1],ys[i-1], zs[i-1]]))
+    interpolated_types.append(types[i-1])
+
+    return interpolated_coords, interpolated_types
 
 def create_projections(repetitions, paths, max_area,points = None):
     """
@@ -123,17 +156,19 @@ def create_projections(repetitions, paths, max_area,points = None):
             ys = [i+ points[neurite_id,1] for i in list(neurons_data["Y"])]
             zs = [i+ points[neurite_id,2] for i in  list(neurons_data["Z"])]
             types = list(neurons_data["type"])
-            radii = list(neurons_data["radius"])
             sphere_id = 0
             spheres = []
-            for x,y,z,t,r in zip(xs,ys,zs,types,radii):
+
+            interpolated_coords,types = interpolate_coordinates(xs,ys,zs, types, 1.0)
+            print(f"Number of interpolated coordinates : {len(interpolated_coords)}")
+            for interpolated_coord,type in zip(interpolated_coords, types):
+
                 position = {}
-                position["x"] = float(x) 
-                position["y"] = float(y)
-                position["z"] = float(z)
-                radius = float(r)
-                neurite_type = int(t)
-                sphere = Sphere (neurite_type, position, neurite_id, sphere_id, radius)
+                position["x"] = float(interpolated_coord[0])
+                position["y"] = float(interpolated_coord[1])
+                position["z"] = float(interpolated_coord[2])
+                neurite_type = int(type)
+                sphere = Sphere (neurite_type, position, neurite_id, sphere_id, 0.5)
                 #print(f"Added sphere neurote type: {sphere.neurite_type}")
                 if neurite_type == 3 or neurite_type == 4:
                     projections_x, projections_y, projections_z = add_sphere_to_projections(sphere, projections_x, projections_y, projections_z)
@@ -201,12 +236,12 @@ def main_shrunk(repetitions, max_area, type):
     files = os.listdir(f"synthesized_neurons/shrunk_75_synthetic_L4_{type}/")
     paths = [f"synthesized_neurons/shrunk_75_synthetic_L4_{type}/{f}" for f in files if ".swc" in f]
     print("Creating projections")
-    points = np.load(f"points_L4_{type}_rep_{repetitions}.npy")
+    points = np.load(f"points_L4_{type}_rep_{repetitions}_interp.npy")
     neurites, projections_x, projections_y, projections_z, points = create_projections(repetitions,paths,points=points, max_area=max_area)
     connectome, colliding_spheres = create_connectome(projections_x, projections_y, projections_z, neurites)
-    np.save(f"connectome_shrunk_75_L4_{type}_rep_{repetitions}", connectome)
-    np.save(f"colliding_spheres_shrunk_75_L4_{type}_rep_{repetitions}", colliding_spheres)
-    np.save(f"points_shrunk_75_L4_{type}_rep_{repetitions}", points)
+    np.save(f"connectome_shrunk_75_L4_{type}_rep_{repetitions}_interp", connectome)
+    np.save(f"colliding_spheres_shrunk_75_L4_{type}_rep_{repetitions}_interp", colliding_spheres)
+    np.save(f"points_shrunk_75_L4_{type}_rep_{repetitions}_interp", points)
     print("Finished !")
 
 def main(repetitions, max_area, type):
@@ -215,13 +250,13 @@ def main(repetitions, max_area, type):
     print("Creating projections")
     neurites, projections_x, projections_y, projections_z, points = create_projections(repetitions,paths, max_area=max_area)
     connectome, colliding_spheres = create_connectome(projections_x, projections_y, projections_z, neurites)
-    np.save(f"connectome_L4_{type}_rep_{repetitions}", connectome)
-    np.save(f"colliding_spheres_L4_{type}_rep_{repetitions}", colliding_spheres)
-    np.save(f"points_L4_{type}_rep_{repetitions}", points)
+    np.save(f"connectome_L4_{type}_rep_{repetitions}_interp", connectome)
+    np.save(f"colliding_spheres_L4_{type}_rep_{repetitions}_interp", colliding_spheres)
+    np.save(f"points_L4_{type}_rep_{repetitions}_interp", points)
     print("Finished !")
 
 repetitions = 1
 max_area = 100
-type = "UPC"
+type = "SSC"
 main(repetitions, max_area, type)
 main_shrunk(repetitions, max_area, type)
