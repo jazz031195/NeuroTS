@@ -258,5 +258,5 @@ def main(repetitions, max_area, type):
 repetitions = 1
 max_area = 100
 type = "SSC"
-main(repetitions, max_area, type)
+# main(repetitions, max_area, type)
 main_shrunk(repetitions, max_area, type)
